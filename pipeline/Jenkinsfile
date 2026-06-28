@@ -1,0 +1,134 @@
+pipeline {
+    agent { label 'built-in' }
+    environment {
+        MAVEN_HOME = '/opt/maven'
+        PATH = "/opt/maven/bin:${env.PATH}"
+        HOST_WORKSPACE = '/home/sergi/jenkins/pipeline'
+        BUILD_TAG = "${env.BUILD_NUMBER}"
+
+        
+    }
+    stages {
+        stage('Debug') {
+            steps {
+                sh 'mvn -v'
+                sh 'pwd'
+                sh 'ls -la'
+                sh 'find . -maxdepth 4 -type f'
+            }
+        }
+        stage('Build') {
+            steps {
+                dir('java-app') {
+                    sh 'mvn clean package -DskipTests'
+                }
+                sh 'cp java-app/target/my-app-1.0-SNAPSHOT.jar jenkins/build/'
+                dir('jenkins/build') {
+                    sh 'chmod +x build.sh'
+                    sh './build.sh'
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'java-app/target/*.jar', fingerprint: true
+                }
+            }
+        }
+
+   stage('Trivy Scan') {
+    steps {
+        sh 'curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b $HOME/bin'
+        dir('jenkins/trivy') {
+            sh 'chmod +x trivy.sh'
+            sh './trivy.sh'
+        }
+    }
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-report.json', fingerprint: true
+        }
+    }
+}
+        
+        stage('Test') {
+            steps {
+                dir('jenkins/test') {
+                    sh 'chmod +x test.sh'
+                    sh './test.sh'
+                }
+            }
+            post {
+                always {
+                    junit 'java-app/target/surefire-reports/*.xml'
+                }
+            }
+        }
+
+        stage('SAST-SonarQube') {
+    steps {
+        withSonarQubeEnv('SonarQube') {
+            dir('jenkins/sonar') {
+                sh 'chmod +x sonarqube.sh'
+                sh './sonarqube.sh'
+            }
+        }
+    }
+}
+       stage('Gitleaks') {
+            steps {
+             
+                    dir('jenkins/secrets') {
+                        sh 'chmod +x secret.sh'
+                        sh './secret.sh'
+                    }
+                
+            }
+
+        }
+        
+
+        stage("SCA") {
+            steps {
+             
+                    dir('jenkins/sca') {
+                        sh 'chmod +x sca.sh'
+                        sh './sca.sh'
+                    }
+                }
+            }
+        
+        stage('Push') {
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'docker-hub-creds',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+        )]) {
+            dir('jenkins/push') {
+                sh 'chmod +x push.sh'
+                sh './push.sh'
+            }
+        }
+    }
+}
+        stage('Deploy') {
+    steps {
+        withCredentials([sshUserPrivateKey(
+            credentialsId: 'deploy-ssh-key',
+            keyFileVariable: 'SSH_KEY'
+        )]) {
+            dir('jenkins/deploy') {
+                sh 'chmod +x deploy.sh'
+                sh './deploy.sh'
+            }
+        }
+    }
+}
+    }
+}
+
+
+
+
+
+// This Jenkinsfile defines a CI/CD pipeline with stages for debugging, building, testing, pushing to Docker Hub, and deploying. It uses environment variables for configuration and credentials for secure access to Docker Hub and deployment servers. The pipeline also archives build artifacts and test results for later reference.

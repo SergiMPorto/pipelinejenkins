@@ -1,0 +1,8 @@
+jenkins_home/
+docker-desktop-amd64.deb
+*.deb
+*.log
+*.tmp
+*.tar
+.vscode/
+.idea/
