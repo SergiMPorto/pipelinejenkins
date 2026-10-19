@@ -6,3 +6,6 @@ docker-desktop-amd64.deb
 *.tar
 .vscode/
 .idea/
+ubuntu/remote-key
+.env
+*.pem
